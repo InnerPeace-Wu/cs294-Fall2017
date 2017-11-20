@@ -32,7 +32,7 @@ def categorical_sample(prob_n):
     return (csprob_n > np.random.rand()).argmax()
 
 
-def get_traj(agent, env, episode_max_length, render=False):
+def get_traj(agent, sess, env, episode_max_length, render=False):
     """
     Run agent-environment loop for one whole episode (trajectory)
     Return dictionary of results
@@ -42,7 +42,7 @@ def get_traj(agent, env, episode_max_length, render=False):
     acts = []
     rews = []
     for _ in xrange(episode_max_length):
-        a = agent.act(ob)
+        a = agent.act(sess, ob)
         (ob, rew, done, _) = env.step(a)
         obs.append(ob)
         acts.append(a)
@@ -102,61 +102,77 @@ class REINFORCEAgent(object):
         # Symbolic variables for observation, action, and advantage
         # These variables stack the results from many timesteps--the first dimension is the timestep
         # ob_no = T.fmatrix()  # Observation
-        ob_no = tf.placeholder(shape=[None, nO], dtype=dtype, name='observation')
+        self.ob_no = tf.placeholder(shape=[None, nO], dtype=dtype, name='observation')
         # a_n = T.ivector()  # Discrete action
-        a_n = tf.placeholder(shape=[None], dtype=tf.int32, name='action')
+        self.a_n = tf.placeholder(shape=[None], dtype=tf.int32, name='action')
         # adv_n = T.fvector()  # Advantage
-        adv_n = tf.placeholder(shape=[None], dtype=dtype, name='advantage')
+        self.adv_n = tf.placeholder(shape=[None], dtype=dtype, name='advantage')
 
         # def shared(arr):
         # return theano.shared(arr.astype('float64'))
         # Create weights of neural network with one hidden layer
         # W0 = shared(np.random.randn(nO, self.config['nhid']) / np.sqrt(nO))
-        W0 = tf.get_variable('W0', np.random.randn(nO, self.config['nhid']) / np.sqrt(nO),
+        W0 = tf.get_variable('W0', initializer=np.random.randn(nO, self.config['nhid']) / np.sqrt(nO),
                              dtype=dtype)
         # b0 = shared(np.zeros(self.config['nhid']))
-        b0 = tf.get_variable('b0', np.zeros(self.config['nhid']), dtype=dtype)
+        b0 = tf.get_variable('b0', initializer=np.zeros(self.config['nhid']), dtype=dtype)
         # W1 = shared(1e-4 * np.random.randn(self.config['nhid'], nA))
-        W1 = tf.get_variable('W1', 1e-4 * np.random.randn(self.config['nhid'], nA), dtype=dtype)
+        W1 = tf.get_variable('W1', initializer=1e-4 * np.random.randn(self.config['nhid'], nA), dtype=dtype)
         # b1 = shared(np.zeros(nA))
-        b1 = tf.get_variable('b1', np.zeros(nA), dtype=dtype)
-        params = [W0, b0, W1, b1]
+        b1 = tf.get_variable('b1', initializer=np.zeros(nA), dtype=dtype)
+        # params = [W0, b0, W1, b1]
         # Action probabilities
         # prob_na = T.nnet.softmax(T.tanh(ob_no.dot(W0) + b0[None, :]).dot(W1) + b1[None, :])
-        prob_na = tf.nn.softmax(tf.matmul(tf.tanh(tf.matmul(ob_no, W0) + b0), W1) + b1)
+        self.prob_na = tf.nn.softmax(tf.matmul(tf.tanh(tf.matmul(self.ob_no, W0) + b0), W1) + b1)
         # N = ob_no.shape[0]
-        N = tf.shape(ob_no)[0]
+        N = tf.shape(self.ob_no)[0]
         # Loss function that we'll differentiate to get the policy gradient
         # Note that we've divided by the total number of timesteps
-        loss = T.log(prob_na[T.arange(N), a_n]).dot(adv_n) / N
-        stepsize = T.fscalar()
-        grads = T.grad(loss, params)
+        # loss = T.log(prob_na[T.arange(N), a_n]).dot(adv_n) / N
+        loss = tf.log(tf.gather_nd(self.prob_na, tf.stack((tf.range(N), self.a_n), axis=1)))
+        loss = tf.reduce_mean(loss * self.adv_n)
+        # stepsize = T.fscalar()
+        # grads = T.grad(loss, params)
         # Perform parameter updates.
         # I find that sgd doesn't work well
         # updates = sgd_updates(grads, params, stepsize)
-        updates = rmsprop_updates(grads, params, stepsize)
-        self.pg_update = theano.function([ob_no, a_n, adv_n, stepsize], [], updates=updates, allow_input_downcast=True)
-        self.compute_prob = theano.function([ob_no], prob_na, allow_input_downcast=True)
+        # updates = rmsprop_updates(grads, params, stepsize)
+        optimizer = tf.train.RMSPropOptimizer(self.config['stepsize'], epsilon=1e-9)
+        self.train_op = optimizer.minimize(loss)
+        # self.pg_update = theano.function([ob_no, a_n, adv_n, stepsize], [], updates=updates, allow_input_downcast=True)
+        # self.compute_prob = theano.function([ob_no], prob_na, allow_input_downcast=True)
 
-    def act(self, ob):
+    def pg_update(self, sess, ob_no, a_n, adv_n):
+        feed_dict = {self.ob_no: ob_no,
+                     self.a_n: a_n,
+                     self.adv_n: adv_n}
+        _ = sess.run(self.train_op, feed_dict=feed_dict)
+
+    def compute_prob(self, sess, ob_no):
+        prob_na = sess.run(self.prob_na, feed_dict={self.ob_no: ob_no.reshape(1, -1)})
+        return prob_na
+
+    def act(self, sess, ob):
         """
         Choose an action.
         """
-        prob = self.compute_prob(ob.reshape(1, -1))
+        # prob = self.compute_prob(ob.reshape(1, -1))
+        prob = self.compute_prob(sess, ob)
         action = categorical_sample(prob)
         return action
 
-    def learn(self, env):
+    def learn(self, sess, env):
         """
         Run learning algorithm
         """
         cfg = self.config
+
         for iteration in xrange(cfg["n_iter"]):
             # Collect trajectories until we get timesteps_per_batch total timesteps
             trajs = []
             timesteps_total = 0
             while timesteps_total < cfg["timesteps_per_batch"]:
-                traj = get_traj(self, env, cfg["episode_max_length"])
+                traj = get_traj(self, sess, env, cfg["episode_max_length"])
                 trajs.append(traj)
                 timesteps_total += len(traj["reward"])
             all_ob = np.concatenate([traj["ob"] for traj in trajs])
@@ -171,7 +187,7 @@ class REINFORCEAgent(object):
             all_action = np.concatenate([traj["action"] for traj in trajs])
             all_adv = np.concatenate(advs)
             # Do policy gradient update step
-            self.pg_update(all_ob, all_action, all_adv, cfg["stepsize"])
+            self.pg_update(sess, all_ob, all_action, all_adv)
             eprews = np.array([traj["reward"].sum() for traj in trajs])  # episode total rewards
             eplens = np.array([len(traj["reward"]) for traj in trajs])  # episode lengths
             # Print stats
@@ -183,14 +199,19 @@ class REINFORCEAgent(object):
             print("MeanRew: \t %s +- %s" % (eprews.mean(), eprews.std() / np.sqrt(len(eprews))))
             print("MeanLen: \t %s +- %s" % (eplens.mean(), eplens.std() / np.sqrt(len(eplens))))
             print("-----------------")
-            get_traj(self, env, cfg["episode_max_length"], render=True)
+            get_traj(self, sess, env, cfg["episode_max_length"], render=True)
 
 
 def main():
-    env = gym.make("Acrobot-v0")
+    env = gym.make("CartPole-v0")
     agent = REINFORCEAgent(env.observation_space, env.action_space,
                            episode_max_length=env.spec.timestep_limit)
-    agent.learn(env)
+    # for tensorflow
+    config = tf.ConfigProto()
+    config.gpu_options.allow_growth = True
+    sess = tf.Session(config=config)
+    sess.run(tf.global_variables_initializer())
+    agent.learn(sess, env)
 
 
 if __name__ == "__main__":
