@@ -1,18 +1,18 @@
 import pickle
 import tensorflow as tf
 import numpy as np
-import tf_util
-import gym
-import load_policy
+# import tf_util
+# import gym
+# import load_policy
 import argparse
-import tensorflow.contrib.slim as slim
-# import matplotlib.pyplot as plt
+# import tensorflow.contrib.slim as slim
+import matplotlib.pyplot as plt
 
 
 def smooth(a, beta=0.8):
     '''smooth the curve'''
 
-    for i in xrange(1, len(a)):
+    for i in range(1, len(a)):
         a[i] = beta * a[i - 1] + (1 - beta) * a[i]
     return a
 
@@ -68,9 +68,9 @@ def main():
     # get expert_data
     parser = argparse.ArgumentParser()
     parser.add_argument('--envname', dest='envname', type=str, default='Hopper-v1')
-    parser.add_argument('--batch_size', dest='batch_size', type=int, default=100)
+    parser.add_argument('--batch_size', dest='batch_size', type=int, default=32)
     parser.add_argument('--epoch', dest='epoch', type=int, default=10)
-    parser.add_argument('--lr', dest='lr', type=float, default=5e-2)
+    parser.add_argument('--lr', dest='lr', type=float, default=1e-3)
     args = parser.parse_args()
 
     with open('./expert_data_' + args.envname + '.pkl', 'rb') as f:
@@ -108,6 +108,11 @@ def main():
                 print("loss: %.4f" % loss)
 
     # drop plot
+    plt.plot(smooth(losses))
+    plt.xlabel('iterations')
+    plt.ylabel('loss')
+    plt.title('training process')
+    plt.savefig('bc_loss.pdf', format='pdf')
 
 
 if __name__ == '__main__':
