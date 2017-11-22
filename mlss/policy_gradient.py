@@ -96,7 +96,7 @@ class REINFORCEAgent(object):
         nA = action_space.n
         # Here are all the algorithm parameters. You can modify them by passing in keyword args
         self.config = dict(episode_max_length=100, timesteps_per_batch=10000, n_iter=100,
-                           gamma=1.0, stepsize=0.05, nhid=20)
+                           gamma=1.0, stepsize=0.03, nhid=20)
         self.config.update(usercfg)
 
         # Symbolic variables for observation, action, and advantage
@@ -130,7 +130,7 @@ class REINFORCEAgent(object):
         # Note that we've divided by the total number of timesteps
         # loss = T.log(prob_na[T.arange(N), a_n]).dot(adv_n) / N
         loss = tf.log(tf.gather_nd(self.prob_na, tf.stack((tf.range(N), self.a_n), axis=1)))
-        loss = tf.reduce_mean(loss * self.adv_n)
+        self.loss = -tf.reduce_mean(loss * self.adv_n)
         # stepsize = T.fscalar()
         # grads = T.grad(loss, params)
         # Perform parameter updates.
@@ -146,7 +146,8 @@ class REINFORCEAgent(object):
         feed_dict = {self.ob_no: ob_no,
                      self.a_n: a_n,
                      self.adv_n: adv_n}
-        _ = sess.run(self.train_op, feed_dict=feed_dict)
+        loss, _ = sess.run([self.loss, self.train_op], feed_dict=feed_dict)
+        return loss
 
     def compute_prob(self, sess, ob_no):
         prob_na = sess.run(self.prob_na, feed_dict={self.ob_no: ob_no.reshape(1, -1)})
@@ -187,12 +188,13 @@ class REINFORCEAgent(object):
             all_action = np.concatenate([traj["action"] for traj in trajs])
             all_adv = np.concatenate(advs)
             # Do policy gradient update step
-            self.pg_update(sess, all_ob, all_action, all_adv)
+            loss = self.pg_update(sess, all_ob, all_action, all_adv)
             eprews = np.array([traj["reward"].sum() for traj in trajs])  # episode total rewards
             eplens = np.array([len(traj["reward"]) for traj in trajs])  # episode lengths
             # Print stats
             print("-----------------")
             print("Iteration: \t %i" % iteration)
+            print("Loss: \t %.2f" % loss)
             print("NumTrajs: \t %i" % len(eprews))
             print("NumTimesteps: \t %i" % np.sum(eplens))
             print("MaxRew: \t %s" % eprews.max())

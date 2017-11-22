@@ -16,6 +16,7 @@ import tf_util
 import gym
 import load_policy
 
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
@@ -23,7 +24,7 @@ def main():
     parser.add_argument('envname', type=str)
     parser.add_argument('--render', action='store_true')
     parser.add_argument("--max_timesteps", type=int)
-    parser.add_argument('--num_rollouts', type=int, default=20,
+    parser.add_argument('--num_rollouts', type=int, default=2,
                         help='Number of expert roll outs')
     args = parser.parse_args()
 
@@ -48,7 +49,7 @@ def main():
             totalr = 0.
             steps = 0
             while not done:
-                action = policy_fn(obs[None,:])
+                action = policy_fn(obs[None, :])
                 observations.append(obs)
                 actions.append(action)
                 obs, r, done, _ = env.step(action)
@@ -56,7 +57,8 @@ def main():
                 steps += 1
                 if args.render:
                     env.render()
-                if steps % 100 == 0: print("%i/%i"%(steps, max_steps))
+                if steps % 100 == 0:
+                    print("%i/%i" % (steps, max_steps))
                 if steps >= max_steps:
                     break
             returns.append(totalr)
@@ -64,9 +66,18 @@ def main():
         print('returns', returns)
         print('mean return', np.mean(returns))
         print('std of return', np.std(returns))
+        # get the space shapes
+        # For Hopper-v1 ob: (11, ), action: (1, 3)
+        print('shape of observations:', np.array(observations).shape)
+        print('shape of actions:', np.array(actions).shape)
 
         expert_data = {'observations': np.array(observations),
                        'actions': np.array(actions)}
+
+        # save expert_data
+        with open('./expert_data_' + args.envname + '.pkl', 'wb') as f:
+            pickle.dump(expert_data, f, pickle.HIGHEST_PROTOCOL)
+
 
 if __name__ == '__main__':
     main()
