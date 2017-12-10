@@ -1,13 +1,14 @@
 import pickle
 import tensorflow as tf
 import numpy as np
-import pprint
 import tf_util
 import gym
+import sys
 # import load_policy
 import argparse
 # import tensorflow.contrib.slim as slim
 import matplotlib.pyplot as plt
+import matplotlib
 
 
 def smooth(a, beta=0.8):
@@ -74,9 +75,14 @@ class Behavioral_clone(object):
 
 
 def main():
+    if sys.platform == 'darwin':
+        # mac
+        matplotlib.use('TkAgg')
+        print('Using Mac OS')
     # get expert_data
     parser = argparse.ArgumentParser()
-    parser.add_argument('--envname', dest='envname', type=str, default='Hopper-v1')
+    parser.add_argument('expert_data', type=str)
+    parser.add_argument('envname', type=str)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=64)
     parser.add_argument('--epoch', dest='epoch', type=int, default=10)
     parser.add_argument('--lr', dest='lr', type=float, default=1e-3)
@@ -86,7 +92,7 @@ def main():
                         help='Number of expert roll outs')
     args = parser.parse_args()
 
-    with open('./output/expert_data_' + args.envname + '.pkl', 'rb') as f:
+    with open(args.expert_data, 'rb') as f:
         expert_data = pickle.loads(f.read())
 
     obs = expert_data['observations']
@@ -114,7 +120,7 @@ def main():
     losses = []
     with tf.Session(config=tfconfig) as sess:
         model = Behavioral_clone(obs.shape[1], acts.shape[1])
-        model.build_net([128, 128, 128], lr=args.lr)
+        model.build_net([128, 256, 128], lr=args.lr)
         sess.run(tf.global_variables_initializer())
         for e in range(args.epoch):
             # do random shuffle
@@ -127,9 +133,16 @@ def main():
                 loss = model.train(sess, ob_batch, act_batch)
                 if i % 100 == 0:
                     losses.append(loss)
-                    print("loss: %.4f" % loss)
+                    print("loss: %.5f" % loss)
 
         print("validation loss: {}".format(model.evaluate(sess, obs_val, acts_val)))
+        # drop plot
+        plt.plot(smooth(losses, 0))
+        plt.xlabel('iterations')
+        plt.ylabel('loss')
+        plt.title('training process %s ' % args.lr)
+        # plt.show()
+        plt.savefig('./output/bc_loss_%s.pdf' % args.lr, format='pdf')
 
         tf_util.initialize()
 
@@ -163,13 +176,6 @@ def main():
         print('returns', returns)
         print('mean return', np.mean(returns))
         print('std of return', np.std(returns))
-    # drop plot
-    plt.plot(smooth(losses))
-    plt.xlabel('iterations')
-    plt.ylabel('loss')
-    plt.title('training process %s ' % args.lr)
-    # plt.show()
-    plt.savefig('./output/bc_loss_%s.pdf' % args.lr, format='pdf')
 
 
 if __name__ == '__main__':

@@ -74,7 +74,8 @@ def main():
                        'actions': np.array(actions)}
 
         # save expert_data
-        with open('./output/expert_data_' + args.envname + '.pkl', 'wb') as f:
+        with open('./output/' + args.envname + '_expert_' +
+                  str(args.num_rollouts) + '.pkl', 'wb') as f:
             pickle.dump(expert_data, f, pickle.HIGHEST_PROTOCOL)
 
 
