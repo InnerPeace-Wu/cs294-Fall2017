@@ -47,8 +47,11 @@ class Behavioral_clone(object):
         self.act = tf.contrib.layers.fully_connected(fc, self.out_dim)
         self.loss = tf.nn.l2_loss(self.act_gt - self.act)
         # may add exponentially decay
-        optimizer = tf.train.AdamOptimizer(lr)
-        self.train_op = optimizer.minimize(self.loss)
+        global_step = tf.Variable(0, trainable=False)
+        # learning_rate = tf.train.exponential_decay(lr, global_step, 1000, 0.5, staircase=True)
+        learning_rate = lr
+        optimizer = tf.train.AdamOptimizer(learning_rate)
+        self.train_op = optimizer.minimize(self.loss, global_step=global_step)
 
     def train(self, sess, obs, act_gt, keep_prob=1.):
         feed = {self.obs: obs, self.act_gt: act_gt,
@@ -70,7 +73,7 @@ def main():
     parser.add_argument('--envname', dest='envname', type=str, default='Hopper-v1')
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=32)
     parser.add_argument('--epoch', dest='epoch', type=int, default=10)
-    parser.add_argument('--lr', dest='lr', type=float, default=1e-3)
+    parser.add_argument('--lr', dest='lr', type=float, default=1e-4)
     args = parser.parse_args()
 
     with open('./expert_data_' + args.envname + '.pkl', 'rb') as f:
@@ -93,7 +96,7 @@ def main():
     losses = []
     with tf.Session(config=tfconfig) as sess:
         model = Behavioral_clone(obs[0].shape[0], acts[0].shape[0])
-        model.build_net([40, 40, 40], lr=args.lr)
+        model.build_net([128, 256, 256, 256, 128], lr=args.lr)
         sess.run(tf.global_variables_initializer())
         for e in range(args.epoch):
             # do random shuffle
@@ -104,15 +107,17 @@ def main():
                 ob_batch = obs[i * bs: (i + 1) * bs]
                 act_batch = acts[i * bs: (i + 1) * bs]
                 loss = model.train(sess, ob_batch, act_batch)
-                losses.append(loss)
-                print("loss: %.4f" % loss)
+                if i % 100 == 0:
+                    losses.append(loss)
+                    print("loss: %.4f" % loss)
 
     # drop plot
     plt.plot(smooth(losses))
     plt.xlabel('iterations')
     plt.ylabel('loss')
-    plt.title('training process')
-    plt.savefig('bc_loss.pdf', format='pdf')
+    plt.title('training process %s ' % args.lr)
+    # plt.show()
+    plt.savefig('bc_loss_%s.pdf' % args.lr, format='pdf')
 
 
 if __name__ == '__main__':
