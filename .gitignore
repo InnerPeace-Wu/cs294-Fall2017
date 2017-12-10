@@ -1,6 +1,7 @@
 # innerpeace
 .DS_Store
 .idea
+output/
 
 # sublime
 *.sublime-project
