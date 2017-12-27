@@ -120,7 +120,8 @@ def initialize():
 
 
 def eval(expr, feed_dict=None):
-    if feed_dict is None: feed_dict = {}
+    if feed_dict is None:
+        feed_dict = {}
     return get_session().run(expr, feed_dict=feed_dict)
 
 
@@ -238,8 +239,8 @@ def batchnorm(x, name, phase, updates, gamma=0.96):
     y = switch(phase, trainy, testy)
 
     out = y * tf.get_variable(name + "/scaling", shape=[1, k], initializer=tf.constant_initializer(1.0), trainable=True) \
-          + tf.get_variable(name + "/translation", shape=[1, k], initializer=tf.constant_initializer(0.0),
-                            trainable=True)
+        + tf.get_variable(name + "/translation", shape=[1, k], initializer=tf.constant_initializer(0.0),
+                          trainable=True)
     return out
 
 

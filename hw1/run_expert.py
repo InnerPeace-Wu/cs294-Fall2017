@@ -70,14 +70,6 @@ def main():
         print('shape of observations:', np.array(observations).shape)
         print('shape of actions:', np.array(actions).shape)
 
-        expert_data = {'observations': np.array(observations),
-                       'actions': np.array(actions)}
-
-        # save expert_data
-        with open('./output/' + args.envname + '_expert_' +
-                  str(args.num_rollouts) + '.pkl', 'wb') as f:
-            pickle.dump(expert_data, f, pickle.HIGHEST_PROTOCOL)
-
 
 if __name__ == '__main__':
     main()
