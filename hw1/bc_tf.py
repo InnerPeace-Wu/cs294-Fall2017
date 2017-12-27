@@ -5,6 +5,8 @@ import tensorflow as tf
 import numpy as np
 import argparse
 import os
+import sys
+import matplotlib
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from utils import smooth, generate_expert_data, test_run, Policy
@@ -30,7 +32,11 @@ def parse_arg():
     return args
 
 
-def behaviral_cloning(save_fig=True, save_env=True):
+def behaviral_cloning(save_fig=True, save_env=False):
+    if sys.platform == 'darwin':
+        # mac
+        matplotlib.use('TkAgg')
+        print('Using Mac OS')
     args = parse_arg()
     bs = args.batch_size
     expert_data = 'output/' + args.envname + '_expert_' + str(args.num_rollouts) + '.pkl'
