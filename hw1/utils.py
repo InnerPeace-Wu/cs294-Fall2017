@@ -48,7 +48,8 @@ def generate_expert_data(envname, num_rollouts, max_timesteps=None, expert_polic
         print('shape of actions:', np.array(actions).shape)
 
         expert_data = {'observations': np.array(observations),
-                       'actions': np.array(actions)}
+                       'actions': np.array(actions),
+                       'returns': np.array(returns)}
 
         # save expert_data
         if save:
@@ -62,12 +63,14 @@ def generate_expert_data(envname, num_rollouts, max_timesteps=None, expert_polic
         return expert_data
 
 
-def test_run(env, num_rollouts, policy, max_steps, render=False):
+def test_run(env, num_rollouts, policy, max_steps, render=False,
+             verbose=False):
     returns = []
     observations = []
     actions = []
     for i in range(num_rollouts):
-        print('iter', i)
+        if verbose:
+            print('iter', i)
         obs = env.reset()
         done = False
         totalr = 0.
@@ -79,9 +82,9 @@ def test_run(env, num_rollouts, policy, max_steps, render=False):
             obs, r, done, _ = env.step(action)
             totalr += r
             steps += 1
-            if render or i + 1 == num_rollouts:
+            if render or i + 1 == num_rollouts and verbose:
                 env.render()
-            if steps % 100 == 0:
+            if steps % 100 == 0 and verbose:
                 print("%i/%i" % (steps, max_steps))
             if steps >= max_steps:
                 break
@@ -120,18 +123,23 @@ class Policy():
 
     def validate(self, env, max_steps):
         reward = 0.
+        observations = []
+        actions = []
         obs = env.reset()
         steps = 0
         done = False
         while not done:
             action = self.action(obs[None, :])[0]
+            observations.append(obs)
+            actions.append(action)
             obs, r, done, _ = env.step(action)
             reward += r
             steps += 1
             if steps >= max_steps or done:
                 break
 
-        return reward
+        return {'reward': reward, 'observations': np.array(observations),
+                'actions': np.squeeze(np.array(actions))}
 
 
 def generating_test():
